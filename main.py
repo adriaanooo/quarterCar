@@ -1,28 +1,28 @@
 from quarter_car import QuarterCar
-import matplotlib.pyplot as plt
-import seaborn as sns
-from input_profile import input_profile
-from data_handling import write_to_excel
+from data_handling import params_from_excel, write_to_excel
+from plotting import plot_data, animate_data
+from input_profile import sweep_60s_40Hz, road_bump
 
 
 def main():
-    time = 60
-    n_samples = 1000
 
-    my_car = QuarterCar(input_profile=input_profile, time=time, n_samples=n_samples)
-    t, m1, m2, profile = my_car.get_displacements()
+    # Grab data from excel sheet.
+    m1, m2, k1, c1, k2 = params_from_excel('excel_files/inputs.xlsx')
 
-    write_to_excel('C:/Users/adrvb/OneDrive/Documents/OTR/Quarter Car Model/outputs.xlsx', t, m1, m2)
+    # Set run time and resolution
+    time = int(input("\nRun time (s): "))
+    n_samples = int(input("Samples: "))
 
-    fig, ax = plt.subplots()
-    sns.lineplot(x=t, y=m1, alpha=0.25, label='Sprung Mass')
-    sns.lineplot(x=t, y=m2, alpha=0.5, label='Unsprung Mass')
-    sns.lineplot(x=t, y=profile, alpha=0.75, label='Input Profile')
+    # Create quarter-car instance
+    my_car = QuarterCar(m1, m2, k1, c1, k2, input_profile=sweep_60s_40Hz, time=time, n_samples=n_samples)
+    my_car.print_vehicle_params()
 
-    ax.set(ylabel='Displacement (m)', xlabel='Time (s)')
-    fig.legend()
+    # Write displacements to excel sheet
+    write_to_excel('excel_files/outputs.xlsx', my_car.t, my_car.sprung_disp, my_car.unsprung_disp)
 
-    plt.show()
+    # Show results.
+    plot_data(my_car.t, my_car.sprung_disp, my_car.unsprung_disp, my_car.input_profile)
+    #animate_data(time, n_samples, my_car.t, my_car.sprung_disp, my_car.unsprung_disp, my_car.input_profile)
 
 
 if __name__ == '__main__':

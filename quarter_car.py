@@ -1,65 +1,83 @@
 from math import *
-import pandas as pd
 import numpy as np
 from scipy.integrate import solve_ivp
-from data_handling import load_from_excel
+from scipy.misc import derivative
 
 
 class QuarterCar:
     """
     A quarter car model.
     """
-    def __init__(self, m1=0.0, m2=0.0, k1=0.0, c1=0.0, k2=0.0, c2=0.0,
-                 time=60, n_samples=5000,
-                 input_profile=None,
-                 path="C:/Users/adrvb/OneDrive/Documents/OTR/Quarter Car Model/inputs.xlsx"):
-
-        self.t = np.linspace(0, time, n_samples)
-
-        # If no Excel file, take arguments.
-        if path is None:
-            self.m1 = m1 / 4                                        # Sprung mass (kg)
-            self.m2 = m2 + self.m1                                    # Unsprung mass (kg)
-            self.k1 = k1                                            # Spring constant (N/m)
-            self.c1 = c1 * 2 * self.m1 * sqrt(self.k1 / self.m1)    # Damping coefficient to constant
-            self.k2 = k2                                            # Tire stiffness (N/m)
-            self.c2 = c2
-        else:
-            # Grab data from Excel sheet.
-            self.m1, self.m2, self.k1, self.c1, self.k2 = load_from_excel(path=path)
-
-        # Set initial conditions and input profile.
-        self.input_profile = input_profile
-        self.X_0 = (0, 0, 0, 0, input_profile(0))
-
-    def __input_profile_velocity(self, x):
+    def __init__(self, m1=0.0, m2=0.0, k1=0.0, c1=0.0, k2=0.0, c2=0.02, time=60, n_samples=5000, input_profile=None):
         """
-        Gets the derivative of the input profile for system of equations.
-        :param x:
-        :return:
+        Initialize vehicle and run parameters. Solve system of equations.
+        :param m1:
+        :param m2:
+        :param k1:
+        :param c1:
+        :param k2:
+        :param c2:
+        :param time:
+        :param n_samples:
+        :param input_profile:
         """
-        h = 1e-5
-        return (self.input_profile(x + h) - self.input_profile(x - h)) / (2 * h)
+        # Vehicle params
+        self.m1 = m1 / 4                                            # Sprung mass (kg)
+        self.m2 = m2                                                # Unsprung mass (kg)
+        self.k1 = k1                                                # Spring rate (N/m)
+        self.c1 = c1                                                # Damping Ratio
+        self.beta1 = self.__get_damping_constant(self.m1, k1, c1)   # Turns damping ratio in damping constant
+        self.k2 = k2                                                # Tire stiffness (N/m)
+        self.c2 = c2
+        self.beta2 = self.__get_damping_constant(self.m2, k2, c2)   # Tire damping constant.
+
+        # Set up run time and resolution
+        self.t = np.linspace(0, time, n_samples)               # Time sample array.
+
+        # Set up input profile for input and plotting
+        self.__input_profile = input_profile                        # Input profile for use in class.
+        self.input_profile = input_profile(self.t)                  # Input profile for attribute.
+
+        # Solve for vehicle displacement
+        self.X_0 = (0, 0, 0, 0)                                     # Initial conditions.
+        solns = solve_ivp(self.__dXdt, [0, self.t[-1]], y0=self.X_0, t_eval=self.t, method='RK45')
+        self.sprung_disp = solns.y[1]
+        self.unsprung_disp = solns.y[3]
 
     def __dXdt(self, t, X):
         """
         Sets up a system of linear DEs for sprung and unsprung masses.
         """
-        # System equations (to be solved)
-        x1, x2, x3, x4, input_profile_disp = X
+        u = np.interp(t, self.t, self.input_profile)
+        du = derivative(self.__input_profile, t)
+        x1, x2, x3, x4 = X
         return [
-            (self.k1 / self.m1) * (x4 - x2) + (self.c1 / self.m1) * (x3 - x1),  # Sprung mass velocity.
-            x1,                                                                 # Sprung mass acceleration.
-            (self.k2 / self.m2) * (input_profile_disp - x4) - (self.k1 / self.m2) * \
-            (x4 - x2) - (self.c1 / self.m2) * (x3 - x1),                        # Unsprung mass velocity.
-            x3,                                                                 # Unsprung mass acceleration.
-            self.__input_profile_velocity(t)                                    # Input profile velocity.
+            (self.k1 / self.m1) * (x4 - x2) + (self.beta1 / self.m1) * (x3 - x1),
+            x1,
+            (self.k2 / self.m2) * (u - x4) + (self.beta2 / self.m2) * (du - x3) - (self.k1 / self.m2) * (x4 - x2)
+            - (self.beta1 / self.m2) * (x3 - x1),
+            x3
         ]
 
-    def get_displacements(self):
+    @staticmethod
+    def __get_damping_constant(m, k, c):
         """
-        Returns time array, sprung mass disp, unsprung mass disp, and input profile.
+        Get damping constant given mass, spring constant, and damping ratio.
+        :param m:
+        :param k:
+        :param c:
         :return:
         """
-        solns = solve_ivp(self.__dXdt, [0, self.t[-1]], y0=self.X_0, t_eval=self.t, method='LSODA')
-        return self.t, solns.y[0], solns.y[2], solns.y[4]
+        return c * 2 * m * sqrt(k / m)
+
+    def print_vehicle_params(self):
+        """
+        Prints the vehicle's parameters.
+        :return:
+        """
+        print(f'Sprung mass:        {self.m1} kg\n'
+              f'Unsprung mass:      {self.m2} kg\n'
+              f'Spring Rate:        {self.k1} N/m\n'
+              f'Damping Ratio:      {self.c1}\n'
+              f'Damping Constant:   {self.beta1} Ns/m\n'
+              f'Tire Stiffness:     {self.k2} N/m')

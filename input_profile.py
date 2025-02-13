@@ -1,12 +1,11 @@
 import numpy as np
-from math import *
 
 
-def input_profile(x):
+def sweep_60s_40Hz(x, t=60):
     f_start = 0  # Start frequency (Hz)
     f_end = 40  # End frequency (Hz)
-    duration = 10  # Total duration of the sweep (seconds)
-    amplitude = 0.01  # Amplitude of the sine wave
+    duration = 60
+    amplitude = 0.02  # Amplitude of the sine wave
 
     # Sweep parameters
     k = (f_end - f_start) / duration  # Frequency rate for linear sweep
@@ -21,3 +20,7 @@ def input_profile(x):
     y = amplitude * np.sin(phase)
 
     return y
+
+
+def road_bump(x, center=1.5, width=0.025, height=0.02):
+    return height * np.exp(-((x - center) ** 2) / (2 * (width ** 2)))
